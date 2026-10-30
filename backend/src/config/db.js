@@ -3,13 +3,22 @@ import { DATABASE_URL } from './env.js';
 
 const { Pool } = pg;
 
+// Detect if connecting to a remote database (Supabase, Neon, Render Postgres, etc.)
+const isRemoteDb =
+  DATABASE_URL &&
+  !DATABASE_URL.includes('localhost') &&
+  !DATABASE_URL.includes('127.0.0.1');
+
 const pool = new Pool({
   connectionString: DATABASE_URL,
+  ssl:
+    isRemoteDb || process.env.NODE_ENV === 'production'
+      ? { rejectUnauthorized: false }
+      : false,
 });
 
 pool.on('error', (err) => {
-  console.error('Unexpected error on idle database client', err);
-  process.exit(1);
+  console.error('Unexpected error on idle database client:', err.message || err);
 });
 
 export async function query(text, params) {
@@ -19,6 +28,8 @@ export async function query(text, params) {
 
 export async function initializeDatabase() {
   const schema = `
+    CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
     CREATE TABLE IF NOT EXISTS users (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       email VARCHAR(255) UNIQUE NOT NULL,
@@ -88,7 +99,28 @@ export async function initializeDatabase() {
 
   try {
     await pool.query(schema);
-    console.log('Database schema initialized successfully');
+
+    // Compatibility check: If password_hash exists instead of password from manual schema.sql run, rename it
+    try {
+      await pool.query(`
+        DO $$
+        BEGIN
+          IF EXISTS (
+            SELECT 1 FROM information_schema.columns 
+            WHERE table_name = 'users' AND column_name = 'password_hash'
+          ) AND NOT EXISTS (
+            SELECT 1 FROM information_schema.columns 
+            WHERE table_name = 'users' AND column_name = 'password'
+          ) THEN
+            ALTER TABLE users RENAME COLUMN password_hash TO password;
+          END IF;
+        END $$;
+      `);
+    } catch (migErr) {
+      console.warn('Column compatibility check note:', migErr.message);
+    }
+
+    console.log('Database schema initialized and verified successfully.');
   } catch (err) {
     console.error('Failed to initialize database schema:', err);
     throw err;

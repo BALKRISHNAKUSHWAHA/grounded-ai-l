@@ -27,10 +27,22 @@ export default function LoginPage() {
       await login(email, password);
       navigate('/dashboard');
     } catch (err) {
-      console.error(err);
-      setError(
-        err.response?.data?.error || 'Invalid credentials. Please verify your email and password.'
-      );
+      console.error('Login error:', err);
+
+      let msg = 'Invalid credentials. Please verify your email and password.';
+      if (err.response?.data?.error) {
+        msg = err.response.data.error;
+      } else if (err.message && err.message.toLowerCase().includes('network error')) {
+        msg =
+          'Network Error: Unable to reach backend server. If using Render free tier, the server may be waking up (please wait 30 seconds and retry). Also check if VITE_API_URL is configured in Vercel.';
+      } else if (err.code === 'ECONNABORTED') {
+        msg = 'Connection timed out. The backend server is spinning up. Please try again in a few seconds.';
+      } else if (err.response?.status === 404) {
+        msg =
+          'Backend route not found (404). Please ensure VITE_API_URL in your Vercel settings points to your Render backend URL (e.g., https://your-backend.onrender.com).';
+      }
+
+      setError(msg);
     } finally {
       setLoading(false);
     }
@@ -53,9 +65,9 @@ export default function LoginPage() {
 
         <div className="bg-white p-8 rounded-2xl border border-gray-200 shadow-sm">
           {error && (
-            <div className="mb-6 p-4 rounded-lg bg-red-50 border border-red-200 text-red-800 text-sm flex items-start space-x-2.5">
+            <div className="mb-6 p-4 rounded-lg bg-red-50 border border-red-200 text-red-800 text-xs flex items-start space-x-2.5 leading-relaxed">
               <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
-              <span>{error}</span>
+              <span className="flex-1">{error}</span>
             </div>
           )}
 
@@ -128,4 +140,3 @@ export default function LoginPage() {
     </div>
   );
 }
-

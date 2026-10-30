@@ -1,7 +1,25 @@
 import axios from 'axios';
 
+// Normalize base URL so both "/api", "https://app.onrender.com", and "https://app.onrender.com/api" work flawlessly
+let rawUrl = import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE_URL || '/api';
+
+if (!rawUrl || typeof rawUrl !== 'string') {
+  rawUrl = '/api';
+}
+
+// Remove trailing slash
+if (rawUrl.endsWith('/')) {
+  rawUrl = rawUrl.slice(0, -1);
+}
+
+// If it's a full remote URL without /api, append /api
+if ((rawUrl.startsWith('http://') || rawUrl.startsWith('https://')) && !rawUrl.endsWith('/api')) {
+  rawUrl = `${rawUrl}/api`;
+}
+
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE_URL || '/api',
+  baseURL: rawUrl,
+  timeout: 30000, // 30s timeout to allow Render free tier instances to spin up
   headers: {
     'Content-Type': 'application/json',
   },
@@ -24,7 +42,13 @@ api.interceptors.response.use(
     if (error.response && error.response.status === 401) {
       localStorage.removeItem('token');
       localStorage.removeItem('user');
-      window.location.href = '/login';
+      // Only redirect if not already on login or register
+      if (
+        !window.location.pathname.includes('/login') &&
+        !window.location.pathname.includes('/register')
+      ) {
+        window.location.href = '/login';
+      }
     }
     return Promise.reject(error);
   }

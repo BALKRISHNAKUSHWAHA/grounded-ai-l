@@ -12,7 +12,7 @@ import exportRoutes from './routes/export.js';
 
 const app = express();
 
-// CORS configuration
+// CORS configuration - Allow Vercel, localhost, and configured domains
 const allowedOrigins = CORS_ORIGIN
   ? CORS_ORIGIN.split(',').map((o) => o.trim())
   : ['http://localhost:5173'];
@@ -22,7 +22,6 @@ app.use(
     origin: (origin, callback) => {
       // Allow requests with no origin (like mobile apps, curl, server-to-server)
       if (!origin) return callback(null, true);
-      // Allow configured origins, all vercel preview/prod domains, or localhost
       if (
         allowedOrigins.includes('*') ||
         allowedOrigins.includes(origin) ||
@@ -44,7 +43,7 @@ app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
 // Health Check
-app.get('/api/health', (req, res) => {
+app.get(['/api/health', '/health', '/'], (req, res) => {
   res.status(200).json({
     status: 'healthy',
     timestamp: new Date().toISOString(),
@@ -52,13 +51,21 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-// API Routes
+// Mount routes with /api prefix
 app.use('/api/auth', authRoutes);
 app.use('/api/projects', projectRoutes);
 app.use('/api/projects/:id/sources', sourceRoutes);
 app.use('/api/projects/:id/chat', chatRoutes);
 app.use('/api/projects/:id', synthesisRoutes);
 app.use('/api/projects/:id', exportRoutes);
+
+// Mount fallback routes without /api prefix for hosting URL compatibility
+app.use('/auth', authRoutes);
+app.use('/projects', projectRoutes);
+app.use('/projects/:id/sources', sourceRoutes);
+app.use('/projects/:id/chat', chatRoutes);
+app.use('/projects/:id', synthesisRoutes);
+app.use('/projects/:id', exportRoutes);
 
 // 404 Route handler
 app.use((req, res) => {
@@ -90,9 +97,9 @@ async function startServer() {
     });
   } catch (err) {
     console.error('Failed to start server:', err);
-    process.exit(1);
+    // Don't kill process immediately so logs can be inspected on Render
+    setTimeout(() => process.exit(1), 2000);
   }
 }
 
 startServer();
-
